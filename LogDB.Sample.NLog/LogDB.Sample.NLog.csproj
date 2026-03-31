@@ -8,8 +8,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="LogDB.Client" Version="5.1.0" />
-    <PackageReference Include="LogDB.NLog" Version="5.1.0" />
+    <PackageReference Include="LogDB.Client" Version="5.1.1" />
+    <PackageReference Include="LogDB.NLog" Version="5.1.1" />
     <PackageReference Include="NLog" Version="6.0.7" />
   </ItemGroup>
 
