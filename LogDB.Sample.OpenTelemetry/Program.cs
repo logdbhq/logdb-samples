@@ -42,15 +42,7 @@ internal static class Program
         var serviceName = "eShop.CheckoutAPI";
         var envName = "development";
 
-        string apiKey = Environment.GetEnvironmentVariable("LOGDB_API_KEY", EnvironmentVariableTarget.User);
-        if (string.IsNullOrWhiteSpace(apiKey))
-        {
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine("Error: LOGDB_API_KEY environment variable is required.");
-            Console.ResetColor();
-            Console.WriteLine("Set LOGDB_API_KEY and rerun the sample.");
-            return;
-        }
+        var apiKey = GetRequiredApiKey();
 
         Console.WriteLine("Writer endpoint is auto-discovered by LogDB SDK.");
         Console.WriteLine();
@@ -158,6 +150,20 @@ internal static class Program
         Console.WriteLine();
 
         PrintStep("Infrastructure builder demos are not included in the GitHub package build used by this sample.");
+    }
+
+    private static string GetRequiredApiKey()
+    {
+        var apiKey = Environment.GetEnvironmentVariable("LOGDB_API_KEY", EnvironmentVariableTarget.User);
+        if (!string.IsNullOrWhiteSpace(apiKey))
+            return apiKey;
+
+        Console.ForegroundColor = ConsoleColor.Red;
+        Console.WriteLine("Error: LOGDB_API_KEY environment variable is required.");
+        Console.ResetColor();
+        Console.WriteLine("Set LOGDB_API_KEY and rerun the sample.");
+        Environment.Exit(1);
+        return string.Empty;
     }
 
     private static void PrintStep(string message)
@@ -270,6 +276,8 @@ internal static class Program
         logger.LogInformation("Order {OrderId} dispatched to warehouse queue", orderId);
     }
 }
+
+
 
 
 

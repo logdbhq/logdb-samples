@@ -6,7 +6,7 @@ using LogDB.Client.Models;
 using LogDB.Client.Services;
 using LogDB.Extensions.Logging;
 
-string apiKey = Environment.GetEnvironmentVariable("LOGDB_API_KEY", EnvironmentVariableTarget.User);
+var apiKey = GetRequiredApiKey();
 var readerServiceUrl = await LogDBReaderExtensions.DiscoverReaderServiceUrlAsync();
 if (!string.IsNullOrWhiteSpace(readerServiceUrl))
 {
@@ -363,6 +363,18 @@ catch (Exception ex)
     WriteError("\nRun failed. See error details above.");
 }
 
+static string GetRequiredApiKey()
+{
+    var apiKey = Environment.GetEnvironmentVariable("LOGDB_API_KEY", EnvironmentVariableTarget.User);
+    if (!string.IsNullOrWhiteSpace(apiKey))
+        return apiKey;
+
+    WriteError("LOGDB_API_KEY environment variable is required.");
+    WriteInfo("Set LOGDB_API_KEY and rerun the sample.");
+    Environment.Exit(1);
+    return string.Empty;
+}
+
 static void WriteSection(string title)
 {
     var width = Math.Max(32, title.Length + 8);
@@ -386,6 +398,8 @@ static void WriteWithColor(string message, ConsoleColor color)
     Console.WriteLine(message);
     Console.ForegroundColor = originalColor;
 }
+
+
 
 
 

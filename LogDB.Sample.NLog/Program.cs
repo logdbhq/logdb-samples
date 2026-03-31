@@ -4,7 +4,7 @@ using LogDB.Client.Services;
 using NLog;
 using NLog.Config;
 
-string apiKey = Environment.GetEnvironmentVariable("LOGDB_API_KEY", EnvironmentVariableTarget.User);
+var apiKey = GetRequiredApiKey();
 
 WriteSection("LogDB NLog Writer Demo");
 WriteInfo("This sample sends logs only (no read/query path).");
@@ -167,6 +167,18 @@ finally
 
 WriteInfo("Infrastructure builder demos are not included in the GitHub package build used by this sample.");
 
+static string GetRequiredApiKey()
+{
+    var apiKey = Environment.GetEnvironmentVariable("LOGDB_API_KEY", EnvironmentVariableTarget.User);
+    if (!string.IsNullOrWhiteSpace(apiKey))
+        return apiKey;
+
+    WriteError("LOGDB_API_KEY environment variable is required.");
+    WriteInfo("Set LOGDB_API_KEY and rerun the sample.");
+    Environment.Exit(1);
+    return string.Empty;
+}
+
 static void WriteSection(string title)
 {
     var width = Math.Max(32, title.Length + 8);
@@ -189,6 +201,8 @@ static void WriteWithColor(string message, ConsoleColor color)
     Console.WriteLine(message);
     Console.ForegroundColor = originalColor;
 }
+
+
 
 
 
