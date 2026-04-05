@@ -6,7 +6,7 @@ using LogDB.Client.Models;
 using LogDB.Client.Services;
 using LogDB.Extensions.Logging;
 
-var apiKey = GetRequiredApiKey();
+string apiKey = Environment.GetEnvironmentVariable("LOGDB_API_KEY", EnvironmentVariableTarget.User);
 var readerServiceUrl = await LogDBReaderExtensions.DiscoverReaderServiceUrlAsync();
 if (!string.IsNullOrWhiteSpace(readerServiceUrl))
 {
@@ -52,12 +52,11 @@ try
 {
     await logdb1.LogAsync(new Log
     {
-        Application = "LogDB.Sample.SDK",
+        Application = "com.logdb.sample.sdk",
         Environment = "demo",
         Collection = "sdk-events-simple",
         Level = LogDB.Client.Models.LogLevel.Info,
         Message = "Immediate log â€” no batching, written instantly",
-        CorrelationId = $"sdk-immediate-{Guid.NewGuid():N}",
         AttributesS = new Dictionary<string, string> { ["mode"] = "immediate" }
     });
 
@@ -117,13 +116,12 @@ builder.ConfigureServices((_, services) =>
 var host = builder.Build();
 var logdb = host.Services.GetRequiredService<ILogDBClient>();
 var logger = host.Services.GetRequiredService<ILogger<Program>>();
-var runCorrelationId = $"sdk-run-{Guid.NewGuid():N}";
 
-    logger.LogInformation("Starting LogDB Demo Application with CorrelationId {CorrelationId}...", runCorrelationId);
+    logger.LogInformation("Starting LogDB Demo Application...");
 
 try
 {
-    // ----- Standard Logs -----
+    // ----- Standard Log -----
     WriteStep("Sending standard Logs (batched, visible in Log tab)...");
 
     var visibleLogCount = 24;
@@ -140,14 +138,13 @@ try
         var level = levels[(i - 1) % levels.Length];
         await logdb.LogAsync(new Log
         {
-            Application = "LogDB.Sample.SDK",
+            Application = "com.logdb.sample.sdk",
             Environment = "demo",
             Collection = "sdk-events-batched",
             Level = level,
             Message = $"Simulation event {i:00}/24",
             UserEmail = "user@demo.logdb.com",
             Source = "sample-runner",
-            CorrelationId = runCorrelationId,
             AttributesS = new Dictionary<string, string>
             {
                 ["action"] = "simulation_event",
@@ -187,7 +184,7 @@ try
     await logdb.LogBeatAsync(new LogBeat
     {
         Measurement = "worker_health",
-        Application = "LogDB.Sample.SDK",
+        Application = "com.logdb.sample.sdk",
         Environment = "demo",
         Tag = new List<LogMeta>
         {
@@ -200,7 +197,155 @@ try
         }
     });
 
-    WriteInfo("Infrastructure log type examples are not included in the GitHub package build used by this sample.");
+    // ----- Infrastructure Log Types -----
+    // These typed models convert to Log entries with _sys_type routing.
+    // Users building custom exporters use these same models.
+
+    WriteStep("Sending a LogWindowsEvent...");
+    await logdb.LogAsync(new LogWindowsEvent
+    {
+        EventId = 4625,
+        ProviderName = "Microsoft-Windows-Security-Auditing",
+        Channel = "Security",
+        Level = "Warning",
+        Computer = "DC-01.corp.local",
+        Message = "An account failed to log on.",
+        IpAddress = "10.0.0.55",
+        Collection = "sdk-windows-events"
+    }.ToLog());
+
+    WriteStep("Sending a LogWindowsMetric...");
+    await logdb.LogAsync(new LogWindowsMetric
+    {
+        Measurement = "cpu",
+        ServerName = "WEB-01",
+        CpuUsagePercent = 78.5,
+        CpuIdlePercent = 21.5,
+        CpuCoreCount = 8,
+        Collection = "sdk-windows-metrics"
+    }.ToLog());
+
+    WriteStep("Sending a LogDockerEvent...");
+    await logdb.LogAsync(new LogDockerEvent
+    {
+        ContainerId = "abc123def456",
+        ContainerName = "api-gateway",
+        Image = "nginx:latest",
+        Stream = "stderr",
+        Level = "Error",
+        Message = "upstream timed out (110: Connection timed out)",
+        HostName = "docker-host-01",
+        ComposeProject = "myapp",
+        ComposeService = "gateway",
+        Collection = "sdk-docker-events"
+    }.ToLog());
+
+    WriteStep("Sending a LogDockerMetric...");
+    await logdb.LogAsync(new LogDockerMetric
+    {
+        ContainerId = "abc123def456",
+        ContainerName = "api-gateway",
+        Image = "nginx",
+        ImageTag = "latest",
+        HostName = "docker-host-01",
+        ContainerState = "running",
+        CpuUsagePercent = 45.2,
+        MemoryUsageBytes = 268_435_456,
+        MemoryLimitBytes = 536_870_912,
+        MemoryUsagePercent = 50.0,
+        NetworkRxBytes = 1_048_576,
+        NetworkTxBytes = 524_288,
+        PidsCurrent = 12,
+        Collection = "sdk-docker-metrics"
+    }.ToLog());
+
+    WriteStep("Sending a LogIISEvent...");
+    await logdb.LogAsync(new LogIISEvent
+    {
+        Method = "GET",
+        UriStem = "/api/products",
+        UriQuery = "category=shoes",
+        Status = 200,
+        TimeTaken = 142,
+        ClientIp = "203.0.113.42",
+        ServerIp = "10.0.1.5",
+        Port = 443,
+        Host = "shop.example.com",
+        UserAgent = "Mozilla/5.0",
+        SiteName = "Default Web Site",
+        ServerName = "IIS-WEB-01",
+        BytesSent = 4096,
+        Collection = "sdk-iis-events"
+    }.ToLog());
+
+    WriteStep("Sending a LogNginxEvent...");
+    await logdb.LogAsync(new LogNginxEvent
+    {
+        LogType = "access",
+        TargetName = "api-backend",
+        HostName = "proxy-01",
+        RemoteAddress = "198.51.100.23",
+        Method = "POST",
+        Path = "/api/orders",
+        Protocol = "HTTP/2",
+        StatusCode = 201,
+        ResponseBytes = 1024,
+        RequestTime = 0.045,
+        ServerName = "api.example.com",
+        UserAgent = "curl/7.88.1",
+        Message = "POST /api/orders 201 0.045s",
+        Collection = "sdk-nginx-events"
+    }.ToLog());
+
+    WriteSuccess("Infrastructure log types sent.");
+
+    // ----- Encrypted infrastructure log types -----
+    WriteStep("Sending encrypted infrastructure logs...");
+
+    await logdb.LogAsync(new LogIISEvent
+    {
+        Method = "POST",
+        UriStem = "/api/users/profile",
+        UriQuery = EncryptionService.Encrypt("ssn=123-45-6789&dob=1990-01-01"),
+        Status = 200,
+        TimeTaken = 85,
+        ClientIp = EncryptionService.Encrypt("203.0.113.42"),
+        Username = EncryptionService.Encrypt("alice@example.com"),
+        UserAgent = EncryptionService.Encrypt("Mozilla/5.0 (Windows NT 10.0)"),
+        SiteName = "Secure API",
+        ServerName = "IIS-PCI-01",
+        Collection = "sdk-iis-encrypted"
+    }.ToLog());
+
+    await logdb.LogAsync(new LogNginxEvent
+    {
+        LogType = "access",
+        Method = "GET",
+        Path = "/api/account/balance",
+        StatusCode = 200,
+        RemoteAddress = EncryptionService.Encrypt("198.51.100.23"),
+        UserAgent = EncryptionService.Encrypt("BankApp/2.1 (iOS 17)"),
+        Referer = EncryptionService.Encrypt("https://bank.example.com/dashboard"),
+        Message = EncryptionService.Encrypt("GET /api/account/balance 200"),
+        ServerName = "api.bank.example.com",
+        Collection = "sdk-nginx-encrypted"
+    }.ToLog());
+
+    await logdb.LogAsync(new LogWindowsEvent
+    {
+        EventId = 4625,
+        ProviderName = "Microsoft-Windows-Security-Auditing",
+        Channel = "Security",
+        Level = "Warning",
+        Computer = EncryptionService.Encrypt("DC-01.corp.local"),
+        UserId = EncryptionService.Encrypt("CORP\\admin"),
+        IpAddress = EncryptionService.Encrypt("10.0.0.55"),
+        Message = EncryptionService.Encrypt("An account failed to log on. Target: admin@corp.local"),
+        XmlData = EncryptionService.Encrypt("<Event><Data Name='TargetUserName'>admin</Data></Event>"),
+        Collection = "sdk-windows-encrypted"
+    }.ToLog());
+
+    WriteSuccess("Encrypted infrastructure logs sent.");
 
     // ============================================================
     // SCENARIO 3: Encrypted logging
@@ -214,7 +359,7 @@ try
     WriteStep("Sending an encrypted Log (per-field encryption)...");
     await logdb.LogAsync(new Log
     {
-        Application = "LogDB.Sample.SDK",
+        Application = "com.logdb.sample.sdk",
         Environment = "demo",
         Collection = "sdk-events-encrypted",
         Level = LogDB.Client.Models.LogLevel.Info,
@@ -223,7 +368,6 @@ try
         IpAddress = EncryptionService.Encrypt("192.168.1.42"),                    // encrypted
         RequestPath = "/api/auth/login",                                           // plaintext
         Source = "auth-service",                                                   // plaintext
-        CorrelationId = runCorrelationId,
         AttributesS = new Dictionary<string, string>
         {
             ["region"] = "eu-west-1",                                              // plaintext
@@ -236,7 +380,7 @@ try
     WriteStep("Sending a fully encrypted Log (all fields)...");
     await logdb.LogAsync(new Log
     {
-        Application = EncryptionService.Encrypt("LogDB.Sample.SDK"),
+        Application = EncryptionService.Encrypt("com.logdb.sample.sdk"),
         Environment = EncryptionService.Encrypt("demo"),
         Collection = "sdk-events-encrypted",
         Level = LogDB.Client.Models.LogLevel.Info,
@@ -244,7 +388,6 @@ try
         UserEmail = EncryptionService.Encrypt("john.doe@example.com"),
         IpAddress = EncryptionService.Encrypt("10.0.0.1"),
         Source = EncryptionService.Encrypt("pii-service"),
-        CorrelationId = runCorrelationId,
         AttributesS = new Dictionary<string, string>
         {
             [EncryptionService.Encrypt("ssn")] = EncryptionService.Encrypt("123-45-6789")
@@ -295,12 +438,11 @@ try
         // Send the serialized value as any string field in a Log:
         await logdb.LogAsync(new Log
         {
-            Application = "LogDB.Sample.SDK",
+            Application = "com.logdb.sample.sdk",
             Environment = "demo",
             Collection = "sdk-events-v1-encrypted",
             Level = LogDB.Client.Models.LogLevel.Info,
             Message = "User login with V1-encrypted email",
-            CorrelationId = runCorrelationId,
             UserEmail = serialized,  // <-- V1 encrypted, only the private key holder can decrypt
             AttributesS = new Dictionary<string, string> { ["action"] = "v1_demo" }
         });
@@ -322,15 +464,17 @@ try
     WriteInfo("\nDemo write actions completed. Flushing buffered writes...");
     await logdb.FlushAsync();
     WriteSuccess("Flush completed.");
-
+    
     var expectedLogTabCount = 1 + visibleLogCount + 2 + (!string.IsNullOrWhiteSpace(recipientPubKeyBase64) ? 1 : 0);
+    const int expectedSpecializedLogCount = 9;
     const int expectedCacheCount = 2;
     const int expectedBeatCount = 1;
-
+    
     WriteSection("Expected Results");
     WriteInfo($"Log tab records expected this run: {expectedLogTabCount}");
-    WriteInfo($"Correlation ID for this run: {runCorrelationId}");
     WriteInfo("  Includes: 1 immediate log, 24 standard logs, 2 encrypted logs, plus 1 V1 encrypted log when LOGDB_V1_PUBLIC_KEY is set.");
+    WriteInfo($"Specialized infrastructure records expected outside the main Log tab: {expectedSpecializedLogCount}");
+    WriteInfo("  These go to Windows/IIS/Docker/Nginx specific tables or tabs.");
     WriteInfo($"Cache entries expected: {expectedCacheCount}");
     WriteInfo($"Beat records expected: {expectedBeatCount}");
 
@@ -342,7 +486,7 @@ try
         // Query 1: Read Latest Logs
         WriteInfo($"\n--- 1. Querying Latest Logs for '{logdb.GetType().Name}' ---");
         var logsResponse = await reader.QueryLogs()
-            .FromApplication("LogDB.Sample.SDK")
+            .FromApplication("com.logdb.sample.sdk")
             .OrderByTimestamp(ascending: false)
             .Take(3)
             .ExecuteAsync();
@@ -351,7 +495,7 @@ try
 
         if (latestLogs.Count == 0)
         {
-            WriteWarn("  No logs found for LogDB.Sample.SDK.");
+            WriteWarn("  No logs found for com.logdb.sample.sdk.");
         }
 
         foreach (var l in latestLogs)
@@ -393,8 +537,8 @@ try
     catch (RpcException rpcEx) when (rpcEx.StatusCode == StatusCode.Unknown &&
                                      rpcEx.Status.Detail.Contains("Customer 0 not found", StringComparison.OrdinalIgnoreCase))
     {
-        WriteError("Reader query failed: the reader service rejected the current account context.");
-        WriteWarn("Verify that your API key has read access and that the reader endpoint is correctly configured.");
+        WriteError("Reader query failed: grpc-server still reports Customer 0.");
+        WriteWarn("Recommended fix: deploy grpc-server with API-key account fallback in GetUserAccounts.");
     }
     catch (RpcException rpcEx)
     {
@@ -408,18 +552,6 @@ catch (Exception ex)
 {
     logger.LogError(ex, "An error occurred during the demo execution. Ensure your API Key is valid.");
     WriteError("\nRun failed. See error details above.");
-}
-
-static string GetRequiredApiKey()
-{
-    var apiKey = Environment.GetEnvironmentVariable("LOGDB_API_KEY", EnvironmentVariableTarget.User);
-    if (!string.IsNullOrWhiteSpace(apiKey))
-        return apiKey;
-
-    WriteError("LOGDB_API_KEY environment variable is required.");
-    WriteInfo("Set LOGDB_API_KEY and rerun the sample.");
-    Environment.Exit(1);
-    return string.Empty;
 }
 
 static void WriteSection(string title)
@@ -445,10 +577,4 @@ static void WriteWithColor(string message, ConsoleColor color)
     Console.WriteLine(message);
     Console.ForegroundColor = originalColor;
 }
-
-
-
-
-
-
 
