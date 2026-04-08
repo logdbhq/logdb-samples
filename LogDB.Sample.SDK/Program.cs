@@ -127,45 +127,276 @@ try
     WriteStep("Sending standard Logs (batched, visible in Log tab)...");
 
     var visibleLogCount = 24;
-    var levels = new[]
-    {
-        LogDB.Client.Models.LogLevel.Info,
-        LogDB.Client.Models.LogLevel.Warning,
-        LogDB.Client.Models.LogLevel.Error,
-        LogDB.Client.Models.LogLevel.Debug
-    };
 
     for (var i = 1; i <= visibleLogCount; i++)
     {
-        var level = levels[(i - 1) % levels.Length];
-        await logdb.LogAsync(new Log
+        var orderId = $"ORD-{20480 + i}";
+        var invoiceId = $"INV-{5100 + i}";
+        var customerEmail = $"customer{i:00}@northwind-demo.com";
+
+        Log sampleLog = ((i - 1) % 8) switch
         {
-            Application = "LogDB.Sample.SDK",
-            Environment = "demo",
-            Collection = "sdk-events-batched",
-            Level = level,
-            Message = $"Simulation event {i:00}/24",
-            UserEmail = "user@demo.logdb.com",
-            Source = "sample-runner",
-            CorrelationId = runCorrelationId,
-            AttributesS = new Dictionary<string, string>
+            0 => new Log
             {
-                ["action"] = "simulation_event",
-                ["source"] = "console",
-                ["run_slot"] = i.ToString()
+                Application = "LogDB.Sample.SDK",
+                Environment = "demo",
+                Collection = "sdk-events-batched",
+                Level = LogDB.Client.Models.LogLevel.Info,
+                Message = $"Checkout session opened for order {orderId}",
+                UserEmail = customerEmail,
+                Source = "checkout-api",
+                CorrelationId = runCorrelationId,
+                HttpMethod = "POST",
+                RequestPath = $"/api/orders/{orderId}/checkout",
+                StatusCode = 202,
+                Description = "Customer moved from cart review to checkout.",
+                AttributesS = new Dictionary<string, string>
+                {
+                    ["action"] = "checkout_started",
+                    ["region"] = "eu-central-1",
+                    ["storefront"] = "web"
+                },
+                AttributesN = new Dictionary<string, double>
+                {
+                    ["sequence"] = i,
+                    ["cart_total"] = 79.90 + i
+                },
+                AttributesB = new Dictionary<string, bool>
+                {
+                    ["is_interactive"] = true,
+                    ["is_sample"] = true
+                },
+                Label = new List<string> { "orders", "checkout", "customer-flow" }
             },
-            AttributesN = new Dictionary<string, double>
+            1 => new Log
             {
-                ["cpu_usage_start"] = 12.5 + i,
-                ["sequence"] = i
+                Application = "LogDB.Sample.SDK",
+                Environment = "demo",
+                Collection = "sdk-events-batched",
+                Level = LogDB.Client.Models.LogLevel.Info,
+                Message = $"Payment authorization captured for {invoiceId}",
+                UserEmail = customerEmail,
+                Source = "billing-service",
+                CorrelationId = runCorrelationId,
+                HttpMethod = "POST",
+                RequestPath = $"/api/invoices/{invoiceId}/capture",
+                StatusCode = 200,
+                Description = "Payment gateway returned a successful capture response.",
+                AttributesS = new Dictionary<string, string>
+                {
+                    ["action"] = "payment_captured",
+                    ["provider"] = "stripe",
+                    ["currency"] = "EUR"
+                },
+                AttributesN = new Dictionary<string, double>
+                {
+                    ["sequence"] = i,
+                    ["amount"] = 79.90 + i
+                },
+                AttributesB = new Dictionary<string, bool>
+                {
+                    ["is_interactive"] = false,
+                    ["is_sample"] = true
+                },
+                Label = new List<string> { "billing", "payments", "success" }
             },
-            AttributesB = new Dictionary<string, bool>
+            2 => new Log
             {
-                ["is_interactive"] = true,
-                ["is_sample"] = true
+                Application = "LogDB.Sample.SDK",
+                Environment = "demo",
+                Collection = "sdk-events-batched",
+                Level = LogDB.Client.Models.LogLevel.Warning,
+                Message = $"Inventory for SKU NB-448 dropped below reorder threshold after reserving {orderId}",
+                UserEmail = customerEmail,
+                Source = "inventory-worker",
+                CorrelationId = runCorrelationId,
+                HttpMethod = "PATCH",
+                RequestPath = "/api/inventory/reservations",
+                StatusCode = 200,
+                Description = "Remaining stock is low enough to trigger a replenishment alert.",
+                AttributesS = new Dictionary<string, string>
+                {
+                    ["action"] = "inventory_low",
+                    ["sku"] = "NB-448",
+                    ["warehouse"] = "prg-01"
+                },
+                AttributesN = new Dictionary<string, double>
+                {
+                    ["sequence"] = i,
+                    ["remaining_units"] = 12 - (i % 4),
+                    ["reorder_threshold"] = 10
+                },
+                AttributesB = new Dictionary<string, bool>
+                {
+                    ["is_interactive"] = false,
+                    ["is_sample"] = true
+                },
+                Label = new List<string> { "inventory", "warning", "ops" }
             },
-            Label = new List<string> { "simulation", "startup", $"event-{i:00}" }
-        });
+            3 => new Log
+            {
+                Application = "LogDB.Sample.SDK",
+                Environment = "demo",
+                Collection = "sdk-events-batched",
+                Level = LogDB.Client.Models.LogLevel.Error,
+                Message = $"Tax provider timeout while pricing order {orderId}",
+                UserEmail = customerEmail,
+                Source = "tax-service",
+                CorrelationId = runCorrelationId,
+                HttpMethod = "POST",
+                RequestPath = "/api/tax/quote",
+                StatusCode = 504,
+                Description = "External tax quote request exceeded the 3 second timeout.",
+                AttributesS = new Dictionary<string, string>
+                {
+                    ["action"] = "tax_quote_timeout",
+                    ["provider"] = "vatlayer",
+                    ["region"] = "eu-central-1"
+                },
+                AttributesN = new Dictionary<string, double>
+                {
+                    ["sequence"] = i,
+                    ["duration_ms"] = 3200 + i
+                },
+                AttributesB = new Dictionary<string, bool>
+                {
+                    ["is_interactive"] = false,
+                    ["is_sample"] = true
+                },
+                Label = new List<string> { "tax", "error", "external-dependency" }
+            },
+            4 => new Log
+            {
+                Application = "LogDB.Sample.SDK",
+                Environment = "demo",
+                Collection = "sdk-events-batched",
+                Level = LogDB.Client.Models.LogLevel.Info,
+                Message = $"Customer profile synced for tenant northwind-demo and user {customerEmail}",
+                UserEmail = customerEmail,
+                Source = "profile-service",
+                CorrelationId = runCorrelationId,
+                HttpMethod = "PUT",
+                RequestPath = "/api/customers/profile",
+                StatusCode = 200,
+                Description = "Profile changes were replicated to the read model.",
+                AttributesS = new Dictionary<string, string>
+                {
+                    ["action"] = "profile_synced",
+                    ["tenant"] = "northwind-demo",
+                    ["channel"] = "self-service"
+                },
+                AttributesN = new Dictionary<string, double>
+                {
+                    ["sequence"] = i,
+                    ["changed_fields"] = 4
+                },
+                AttributesB = new Dictionary<string, bool>
+                {
+                    ["is_interactive"] = true,
+                    ["is_sample"] = true
+                },
+                Label = new List<string> { "customers", "profile", "sync" }
+            },
+            5 => new Log
+            {
+                Application = "LogDB.Sample.SDK",
+                Environment = "demo",
+                Collection = "sdk-events-batched",
+                Level = LogDB.Client.Models.LogLevel.Debug,
+                Message = $"Cache refresh completed for pricing snapshot v{1000 + i}",
+                UserEmail = customerEmail,
+                Source = "pricing-cache",
+                CorrelationId = runCorrelationId,
+                HttpMethod = "GET",
+                RequestPath = "/api/pricing/snapshot",
+                StatusCode = 200,
+                Description = "Pricing cache was refreshed from the upstream catalog export.",
+                AttributesS = new Dictionary<string, string>
+                {
+                    ["action"] = "cache_refresh_completed",
+                    ["cache_name"] = "pricing-snapshot",
+                    ["region"] = "eu-west-2"
+                },
+                AttributesN = new Dictionary<string, double>
+                {
+                    ["sequence"] = i,
+                    ["duration_ms"] = 120 + i
+                },
+                AttributesB = new Dictionary<string, bool>
+                {
+                    ["is_interactive"] = false,
+                    ["is_sample"] = true
+                },
+                Label = new List<string> { "cache", "pricing", "debug" }
+            },
+            6 => new Log
+            {
+                Application = "LogDB.Sample.SDK",
+                Environment = "demo",
+                Collection = "sdk-events-batched",
+                Level = LogDB.Client.Models.LogLevel.Warning,
+                Message = $"Webhook delivery retried for shipment event SHP-{900 + i}",
+                UserEmail = customerEmail,
+                Source = "webhook-dispatcher",
+                CorrelationId = runCorrelationId,
+                HttpMethod = "POST",
+                RequestPath = "/api/webhooks/shipments",
+                StatusCode = 429,
+                Description = "Partner endpoint throttled the callback and the dispatcher scheduled a retry.",
+                AttributesS = new Dictionary<string, string>
+                {
+                    ["action"] = "webhook_retry_scheduled",
+                    ["partner"] = "fulfillment-hub",
+                    ["event_type"] = "shipment.updated"
+                },
+                AttributesN = new Dictionary<string, double>
+                {
+                    ["sequence"] = i,
+                    ["retry_in_seconds"] = 30
+                },
+                AttributesB = new Dictionary<string, bool>
+                {
+                    ["is_interactive"] = false,
+                    ["is_sample"] = true
+                },
+                Label = new List<string> { "webhooks", "retry", "delivery" }
+            },
+            _ => new Log
+            {
+                Application = "LogDB.Sample.SDK",
+                Environment = "demo",
+                Collection = "sdk-events-batched",
+                Level = LogDB.Client.Models.LogLevel.Info,
+                Message = $"Audit export finished for reporting window 2026-04-{(i % 9) + 1:00}",
+                UserEmail = customerEmail,
+                Source = "reporting-worker",
+                CorrelationId = runCorrelationId,
+                HttpMethod = "POST",
+                RequestPath = "/api/reports/audit/export",
+                StatusCode = 201,
+                Description = "Compliance export was written to blob storage and marked ready for download.",
+                AttributesS = new Dictionary<string, string>
+                {
+                    ["action"] = "audit_export_ready",
+                    ["format"] = "csv",
+                    ["bucket"] = "compliance-exports"
+                },
+                AttributesN = new Dictionary<string, double>
+                {
+                    ["sequence"] = i,
+                    ["row_count"] = 1500 + (i * 17)
+                },
+                AttributesB = new Dictionary<string, bool>
+                {
+                    ["is_interactive"] = false,
+                    ["is_sample"] = true
+                },
+                Label = new List<string> { "reporting", "audit", "export" }
+            }
+        };
+
+        await logdb.LogAsync(sampleLog);
+        await Task.Delay(Random.Shared.Next(80, 300));
     }
 
     WriteSuccess($"Queued {visibleLogCount} standard Log records for the Log tab.");
@@ -173,6 +404,7 @@ try
     var cacheKey = $"simulation_state:{Guid.NewGuid()}";
 
     // ----- LogCache Entry -----
+    await Task.Delay(Random.Shared.Next(100, 400));
     WriteStep("Sending a LogCache entry (batched)...");
     await logdb.LogCacheAsync(new LogCache
     {
@@ -183,17 +415,18 @@ try
     });
 
     // ----- LogBeat Heartbeat -----
+    await Task.Delay(Random.Shared.Next(100, 400));
     WriteStep("Sending a LogBeat heartbeat (batched)...");
     await logdb.LogBeatAsync(new LogBeat
     {
         Measurement = "worker_health",
-        Application = "LogDB.Sample.SDK",
-        Environment = "demo",
         Tag = new List<LogMeta>
         {
             new LogMeta { Key = "worker", Value = "demo-worker" },
             new LogMeta { Key = "health", Value = "healthy" }
         },
+        Application = "LogDB.Sample.SDK",
+        Environment = "demo",
         Field = new List<LogMeta>
         {
             new LogMeta { Key = "status", Value = "okay" }
@@ -211,6 +444,7 @@ try
     WriteStep("\nScenario 3: Encrypted logging...");
 
     // ----- Per-field encryption: only sensitive fields are encrypted -----
+    await Task.Delay(Random.Shared.Next(200, 500));
     WriteStep("Sending an encrypted Log (per-field encryption)...");
     await logdb.LogAsync(new Log
     {
@@ -233,6 +467,7 @@ try
     });
 
     // ----- Fully encrypted Log: all fields encrypted -----
+    await Task.Delay(Random.Shared.Next(100, 300));
     WriteStep("Sending a fully encrypted Log (all fields)...");
     await logdb.LogAsync(new Log
     {
